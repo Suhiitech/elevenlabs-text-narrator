@@ -1,0 +1,23 @@
+# Local environment and secret files
+.env
+.env.local
+.env.*
+!.env.example
+config.js
+
+# Netlify local dev & build artifacts
+.netlify/
+node_modules/
+
+# OS and Editor files
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

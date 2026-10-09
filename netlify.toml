@@ -1,0 +1,26 @@
+# Netlify Configuration for ElevenLabs Voice Studio
+
+[build]
+  # Publish root folder containing static HTML, CSS, and JS
+  publish = "."
+  # Netlify serverless functions directory
+  functions = "netlify/functions"
+
+# Clean API route mapping
+[[redirects]]
+  from = "/api/generate-speech"
+  to = "/.netlify/functions/generate-speech"
+  status = 200
+
+# Global Security & Caching Headers
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+
+[[headers]]
+  for = "/.netlify/functions/*"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
