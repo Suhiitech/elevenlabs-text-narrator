@@ -34,21 +34,30 @@ const MODEL_DETAILS = {
   }
 };
 
-// --- Sample Prompts ---
+// --- Default Script & Sample Prompts ---
+const DEFAULT_SCRIPT = `Space Exploration: Beyond Earth
+
+Have you ever wondered what lies beyond our planet?
+
+Space exploration helps us discover the mysteries of the universe. From exploring the Moon to sending robotic missions to Mars, scientists are constantly expanding our knowledge.
+
+Satellites help us communicate, predict weather, and observe Earth. In the future, humans may even live on the Moon or travel to Mars.
+
+Space exploration is not just about discovering new worlds. It is about innovation, curiosity, and pushing the limits of human knowledge.
+
+The universe is full of mysteries, and our journey to explore them has only just begun!`;
+
 const SAMPLES = {
-  story: "The old observatory stood at the edge of the jagged cliff, forgotten by time. Through the cracked telescope, Elian didn't just see distant stars—he saw a sequence of flashing constellations that seemed to respond directly to his thoughts.",
+  story: DEFAULT_SCRIPT,
   tech: "Artificial intelligence has reached a pivotal breakthrough. With real-time text-to-speech models operating at sub-100 millisecond latencies, interactive voice agents are indistinguishable from natural human dialogue.",
   dialogue: "Welcome back to Deep Space Chronicles. Before we initiate the hyperdrive sequence, remember this: the universe doesn't whisper its secrets to those who rush. Listen closely to the static between frequencies."
 };
 
 // --- Serverless API Endpoint ---
-// Defaults to the Netlify redirect route '/api/generate-speech'
+// Primary Netlify Serverless Function route
 const API_ENDPOINT = (typeof CONFIG !== 'undefined' && CONFIG.API_ENDPOINT)
   ? CONFIG.API_ENDPOINT
-  : '/api/generate-speech';
-
-// Fallback direct Netlify function path
-const FALLBACK_ENDPOINT = '/.netlify/functions/generate-speech';
+  : '/.netlify/functions/generate-speech';
 
 // --- Application State ---
 const state = {
@@ -149,11 +158,12 @@ document.addEventListener('DOMContentLoaded', () => {
   renderHistory();
   setupEventListeners();
 
-  // Prefill with a sample story if empty
+  // Populate default Space Exploration script on initial load if textarea is empty
   if (!elements.textInput.value.trim()) {
-    elements.textInput.value = SAMPLES.story;
-    updateTextMetrics();
+    elements.textInput.value = DEFAULT_SCRIPT;
   }
+  // Update character, word, and estimated duration metrics
+  updateTextMetrics();
 
   // Check backend serverless function connectivity on startup
   testBackendConnection(true);
@@ -178,8 +188,73 @@ function initBackendUI() {
 }
 
 /**
+ * Executes a request against the Netlify serverless function.
+ * Seamlessly resolves between:
+ * 1. Primary route: /.netlify/functions/generate-speech
+ * 2. Redirect alias: /api/generate-speech
+ * 3. Local Netlify dev server: http://localhost:8888/.netlify/functions/generate-speech
+ *    (in case the user opens index.html in a preview environment on port 5500, 3000, etc.)
+ */
+async function requestBackend(method = 'GET', body = null) {
+  const isLocalhost = ['localhost', '127.0.0.1'].includes(window.location.hostname);
+
+  const candidates = [
+    state.activeEndpoint || '/.netlify/functions/generate-speech',
+    '/.netlify/functions/generate-speech',
+    '/api/generate-speech'
+  ];
+
+  // If viewing on localhost on a port other than 8888 (e.g. Live Server on 5500),
+  // automatically include the Netlify dev server port (8888) as candidate fallback.
+  if (isLocalhost && window.location.port !== '8888') {
+    candidates.push('http://localhost:8888/.netlify/functions/generate-speech');
+    candidates.push('http://127.0.0.1:8888/.netlify/functions/generate-speech');
+    candidates.push('http://localhost:8888/api/generate-speech');
+  }
+
+  const uniqueCandidates = [...new Set(candidates)];
+  let lastError = null;
+
+  for (const endpoint of uniqueCandidates) {
+    try {
+      const options = {
+        method,
+        headers: body ? { 'Content-Type': 'application/json' } : {}
+      };
+      if (body) {
+        options.body = JSON.stringify(body);
+      }
+
+      const response = await fetch(endpoint, options);
+
+      // If this candidate returned 404 or 405 (e.g. static dev server rejecting POST or missing route)
+      // and there are more candidates to try, keep searching
+      if ((response.status === 404 || response.status === 405) && endpoint !== uniqueCandidates[uniqueCandidates.length - 1]) {
+        continue;
+      }
+
+      // Responsive endpoint found! Cache it as activeEndpoint
+      state.activeEndpoint = endpoint;
+      return response;
+    } catch (err) {
+      lastError = err;
+    }
+  }
+
+  if (lastError) {
+    if (isLocalhost) {
+      throw new Error(
+        'Could not connect to Netlify Functions. Please start the local environment by running "npx netlify dev" in your project directory.'
+      );
+    }
+    throw lastError;
+  }
+
+  throw new Error('No serverless endpoint available.');
+}
+
+/**
  * Tests connection to the Netlify serverless function
- * Handles automatic fallback between /api/generate-speech and /.netlify/functions/generate-speech
  */
 async function testBackendConnection(isSilent = false) {
   if (!isSilent) {
@@ -187,13 +262,7 @@ async function testBackendConnection(isSilent = false) {
   }
 
   try {
-    let response = await fetch(state.activeEndpoint, { method: 'GET' });
-
-    // Fallback to direct function path if route redirect isn't active (e.g. raw local static server)
-    if (response.status === 404 && state.activeEndpoint === API_ENDPOINT) {
-      state.activeEndpoint = FALLBACK_ENDPOINT;
-      response = await fetch(state.activeEndpoint, { method: 'GET' });
-    }
+    const response = await requestBackend('GET');
 
     if (response.ok) {
       const data = await response.json();
@@ -225,7 +294,7 @@ async function testBackendConnection(isSilent = false) {
       if (response.status === 500 && errMessage.includes('ELEVENLABS_API_KEY')) {
         elements.backendStatusText.textContent = 'Netlify Key Needed';
         if (!isSilent) {
-          showBackendStatus('Missing ELEVENLABS_API_KEY in Netlify Environment Variables.', 'error');
+          showBackendStatus('Missing ELEVENLABS_API_KEY in .env or Netlify Environment Variables.', 'error');
         }
       } else {
         elements.backendStatusText.textContent = 'Backend Notice';
@@ -237,13 +306,10 @@ async function testBackendConnection(isSilent = false) {
   } catch (networkError) {
     state.backendConnected = false;
     elements.backendStatusDot.className = 'status-dot dot-amber';
-    elements.backendStatusText.textContent = 'Netlify Ready';
+    elements.backendStatusText.textContent = 'Netlify Dev Needed';
 
     if (!isSilent) {
-      showBackendStatus(
-        'Could not reach serverless endpoint. Run with "netlify dev" locally or deploy to Netlify.',
-        'error'
-      );
+      showBackendStatus(networkError.message, 'error');
     }
   }
 }
@@ -295,11 +361,7 @@ function updateNowPlayingLabel() {
 async function fetchUserVoices(isSilent = false) {
   elements.refreshVoicesBtn.classList.add('loading');
   try {
-    let response = await fetch(state.activeEndpoint, { method: 'GET' });
-    if (response.status === 404 && state.activeEndpoint === API_ENDPOINT) {
-      state.activeEndpoint = FALLBACK_ENDPOINT;
-      response = await fetch(state.activeEndpoint, { method: 'GET' });
-    }
+    const response = await requestBackend('GET');
 
     if (!response.ok) {
       const err = await response.json().catch(() => ({}));
@@ -421,23 +483,7 @@ async function generateAndPlayNarration() {
       }
     };
 
-    let response = await fetch(state.activeEndpoint, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(payload)
-    });
-
-    // If 404 on clean route, retry fallback Netlify function route
-    if (response.status === 404 && state.activeEndpoint === API_ENDPOINT) {
-      state.activeEndpoint = FALLBACK_ENDPOINT;
-      response = await fetch(state.activeEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-    }
+    const response = await requestBackend('POST', payload);
 
     if (!response.ok) {
       let errorMessage = `Serverless function error (${response.status})`;

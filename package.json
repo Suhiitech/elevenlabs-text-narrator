@@ -1,0 +1,9 @@
+{
+  "name": "elevenlabs-voice-studio",
+  "version": "1.0.0",
+  "description": "ElevenLabs Text-to-Speech Studio with Netlify Serverless Functions",
+  "scripts": {
+    "dev": "netlify dev",
+    "start": "netlify dev"
+  }
+}

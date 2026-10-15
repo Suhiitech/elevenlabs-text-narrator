@@ -12,16 +12,36 @@
 exports.handler = async (event, context) => {
   const headers = {
     'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, xi-api-key',
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS'
   };
 
+  const httpMethod = (
+    event.httpMethod ||
+    event.method ||
+    event.requestContext?.http?.method ||
+    ''
+  ).toUpperCase();
+
   // Handle CORS preflight
-  if (event.httpMethod === 'OPTIONS') {
+  if (httpMethod === 'OPTIONS') {
     return {
       statusCode: 204,
       headers,
       body: ''
+    };
+  }
+
+  // Handle unsupported HTTP methods
+  if (httpMethod !== 'GET' && httpMethod !== 'POST') {
+    return {
+      statusCode: 405,
+      headers: {
+        ...headers,
+        'Content-Type': 'application/json',
+        'Allow': 'GET, POST, OPTIONS'
+      },
+      body: JSON.stringify({ error: 'Method Not Allowed' })
     };
   }
 
@@ -38,7 +58,7 @@ exports.handler = async (event, context) => {
   }
 
   // GET: Health check & voices sync
-  if (event.httpMethod === 'GET') {
+  if (httpMethod === 'GET') {
     try {
       const response = await fetch('https://api.elevenlabs.io/v1/voices', {
         headers: { 'xi-api-key': apiKey }
@@ -76,11 +96,20 @@ exports.handler = async (event, context) => {
   }
 
   // POST: Text-to-Speech Generation
-  if (event.httpMethod === 'POST') {
+  if (httpMethod === 'POST') {
     try {
       let bodyData = {};
       try {
-        bodyData = JSON.parse(event.body || '{}');
+        if (typeof event.json === 'function') {
+          bodyData = await event.json();
+        } else if (typeof event.body === 'object' && event.body !== null) {
+          bodyData = event.body;
+        } else if (typeof event.body === 'string') {
+          const raw = event.isBase64Encoded
+            ? Buffer.from(event.body, 'base64').toString('utf-8')
+            : event.body;
+          bodyData = JSON.parse(raw || '{}');
+        }
       } catch (parseErr) {
         return {
           statusCode: 400,
@@ -169,7 +198,11 @@ exports.handler = async (event, context) => {
 
   return {
     statusCode: 405,
-    headers: { ...headers, 'Content-Type': 'application/json' },
+    headers: {
+      ...headers,
+      'Content-Type': 'application/json',
+      'Allow': 'GET, POST, OPTIONS'
+    },
     body: JSON.stringify({ error: 'Method Not Allowed' })
   };
 };

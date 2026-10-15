@@ -6,11 +6,20 @@
   # Netlify serverless functions directory
   functions = "netlify/functions"
 
-# Clean API route mapping
+# Local Development Settings for Netlify CLI (`netlify dev`)
+[dev]
+  publish = "."
+  functions = "netlify/functions"
+  framework = "#static"
+  port = 8888
+  autoLaunch = false
+
+# API route mapping (supports both /.netlify/functions/generate-speech and /api/generate-speech)
 [[redirects]]
   from = "/api/generate-speech"
   to = "/.netlify/functions/generate-speech"
   status = 200
+  force = true
 
 # Global Security & Caching Headers
 [[headers]]

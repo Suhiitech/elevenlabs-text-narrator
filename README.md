@@ -124,11 +124,12 @@ netlify dev
 ```text
 ├── .env.example                       # Template for local environment variables
 ├── .gitignore                         # Excludes .env, config.js, and local build artifacts
+├── package.json                       # Scripts for running netlify dev locally
 ├── config.js                          # Client-side config (no secrets)
 ├── index.html                         # Semantic HTML5 UI layout, controls, audio player
 ├── style.css                          # Glassmorphism stylesheet & visualizer styles
-├── app.js                             # Frontend logic calling /api/generate-speech
-├── netlify.toml                       # Netlify configuration & function routing
+├── app.js                             # Frontend logic calling /.netlify/functions/generate-speech
+├── netlify.toml                       # Netlify configuration & [dev] server settings
 ├── netlify/
 │   └── functions/
 │       └── generate-speech.js         # Serverless function holding ELEVENLABS_API_KEY
